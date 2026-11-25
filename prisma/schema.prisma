@@ -1,0 +1,478 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider  = "postgresql"
+  url       = env("DATABASE_URL")
+  directUrl = env("DIRECT_URL")
+}
+
+// ============================================================================
+// 1. USER PROFILES & AUTHENTICATION
+// ============================================================================
+model Profile {
+  id                     String    @id @db.Uuid
+  username               String    @unique @db.VarChar(50)
+  displayName            String    @map("display_name") @db.VarChar(100)
+  email                  String    @db.VarChar(255)
+  avatarUrl              String?   @map("avatar_url")
+  role                   String    @default("USER") @db.VarChar(20)
+  isActive               Boolean   @default(true) @map("is_active")
+  preferredLanguage      String    @default("th") @map("preferred_language") @db.VarChar(5)
+
+  // Progression & Economy
+  level                  Int       @default(1)
+  totalXp                BigInt    @default(0) @map("total_xp")
+  coins                  BigInt    @default(250)
+
+  // Aggregate Stats
+  totalGamesPlayed       Int       @default(0) @map("total_games_played")
+  totalQuestionsAnswered Int       @default(0) @map("total_questions_answered")
+  totalCorrectAnswers    Int       @default(0) @map("total_correct_answers")
+  totalIncorrectAnswers  Int       @default(0) @map("total_incorrect_answers")
+  bestStreak             Int       @default(0) @map("best_streak")
+  dailyLoginStreak       Int       @default(1) @map("daily_login_streak")
+  lastLoginDate          DateTime? @default(now()) @map("last_login_date") @db.Date
+  multiplayerWins        Int       @default(0) @map("multiplayer_wins")
+  multiplayerMatches     Int       @default(0) @map("multiplayer_matches")
+  totalScore             BigInt    @default(0) @map("total_score")
+
+  // Equipped Character Customization
+  equippedCharacterId    String?   @default("char_nova") @map("equipped_character_id") @db.VarChar(64)
+  equippedOutfitId       String?   @default("outfit_starter") @map("equipped_outfit_id") @db.VarChar(64)
+  equippedAccessoryId    String?   @map("equipped_accessory_id") @db.VarChar(64)
+
+  createdAt              DateTime  @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt              DateTime  @default(now()) @updatedAt @map("updated_at") @db.Timestamptz(6)
+
+  // Relations
+  createdQuestions       Question[]               @relation("QuestionAuthor")
+  stageProgress          PlayerStageProgress[]
+  gameSessions           GameSession[]
+  playerAnswers          PlayerAnswer[]
+  dailyAttempts          DailyChallengeAttempt[]
+  inventory              PlayerInventory[]
+  coinTransactions       CoinTransaction[]
+  purchases              PurchaseHistory[]
+  playerMissions         PlayerMission[]
+  playerAchievements     PlayerAchievement[]
+  hostedRooms            MultiplayerRoom[]        @relation("RoomHost")
+  wonRooms               MultiplayerRoom[]        @relation("RoomWinner")
+  roomParticipations     RoomParticipant[]
+
+  @@map("profiles")
+}
+
+// ============================================================================
+// 2. MATHEMATICS CATEGORIES & QUESTIONS
+// ============================================================================
+model MathCategory {
+  id              String            @id @db.VarChar(64)
+  slug            String            @unique @db.VarChar(64)
+  nameTh          String            @map("name_th") @db.VarChar(120)
+  nameEn          String            @map("name_en") @db.VarChar(120)
+  descriptionTh   String?           @map("description_th")
+  descriptionEn   String?           @map("description_en")
+  icon            String            @db.VarChar(64)
+  color           String            @db.VarChar(32)
+  sortOrder       Int               @default(0) @map("sort_order")
+  isActive        Boolean           @default(true) @map("is_active")
+
+  questions       Question[]
+  adventureWorlds AdventureWorld[]
+  gameSessions    GameSession[]
+  rooms           MultiplayerRoom[]
+
+  @@map("math_categories")
+}
+
+model Question {
+  id               String         @id @default(uuid()) @db.Uuid
+  categoryId       String         @map("category_id") @db.VarChar(64)
+  difficulty       String         @db.VarChar(16)
+  questionType     String         @default("MULTIPLE_CHOICE") @map("question_type") @db.VarChar(32)
+  promptTh         String         @map("prompt_th")
+  promptEn         String         @map("prompt_en")
+  optionsJson      Json           @map("options_json")
+  correctOptionId  String         @map("correct_option_id") @db.VarChar(16)
+  explanationTh    String         @map("explanation_th")
+  explanationEn    String         @map("explanation_en")
+  imageUrl         String?        @map("image_url")
+  points           Int            @default(100)
+  timeLimitSeconds Int            @default(30) @map("time_limit_seconds")
+  isActive         Boolean        @default(true) @map("is_active")
+  timesAnswered    Int            @default(0) @map("times_answered")
+  timesCorrect     Int            @default(0) @map("times_correct")
+  createdBy        String?        @map("created_by") @db.Uuid
+  createdAt        DateTime       @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt        DateTime       @default(now()) @updatedAt @map("updated_at") @db.Timestamptz(6)
+
+  category         MathCategory   @relation(fields: [categoryId], references: [id], onDelete: Cascade)
+  author           Profile?       @relation("QuestionAuthor", fields: [createdBy], references: [id], onDelete: SetNull)
+  playerAnswers    PlayerAnswer[]
+
+  @@index([categoryId, difficulty])
+  @@map("questions")
+}
+
+// ============================================================================
+// 3. GAME MODES
+// ============================================================================
+model GameMode {
+  id             String  @id @db.VarChar(64)
+  code           String  @unique @db.VarChar(32)
+  nameTh         String  @map("name_th") @db.VarChar(100)
+  nameEn         String  @map("name_en") @db.VarChar(100)
+  descriptionTh  String? @map("description_th")
+  descriptionEn  String? @map("description_en")
+  baseXpReward   Int     @default(50) @map("base_xp_reward")
+  baseCoinReward Int     @default(25) @map("base_coin_reward")
+  configJson     Json    @default("{}") @map("config_json")
+  isEnabled      Boolean @default(true) @map("is_enabled")
+
+  @@map("game_modes")
+}
+
+// ============================================================================
+// 4. ADVENTURE WORLDS & STAGES
+// ============================================================================
+model AdventureWorld {
+  id            String           @id @db.VarChar(64)
+  worldNumber   Int              @unique @map("world_number")
+  nameTh        String           @map("name_th") @db.VarChar(120)
+  nameEn        String           @map("name_en") @db.VarChar(120)
+  descriptionTh String?          @map("description_th")
+  descriptionEn String?          @map("description_en")
+  themeColor    String           @map("theme_color") @db.VarChar(32)
+  icon          String           @db.VarChar(64)
+  categoryId    String?          @map("category_id") @db.VarChar(64)
+  requiredLevel Int              @default(1) @map("required_level")
+  rewardXp      Int              @default(300) @map("reward_xp")
+  rewardCoins   Int              @default(150) @map("reward_coins")
+  isActive      Boolean          @default(true) @map("is_active")
+
+  category      MathCategory?    @relation(fields: [categoryId], references: [id])
+  stages        AdventureStage[]
+
+  @@map("adventure_worlds")
+}
+
+model AdventureStage {
+  id            String                @id @db.VarChar(64)
+  worldId       String                @map("world_id") @db.VarChar(64)
+  stageNumber   Int                   @map("stage_number")
+  nameTh        String                @map("name_th") @db.VarChar(120)
+  nameEn        String                @map("name_en") @db.VarChar(120)
+  difficulty    String                @db.VarChar(16)
+  isBoss        Boolean               @default(false) @map("is_boss")
+  bossNameTh    String?               @map("boss_name_th") @db.VarChar(120)
+  bossNameEn    String?               @map("boss_name_en") @db.VarChar(120)
+  bossHp        Int?                  @default(100) @map("boss_hp")
+  questionCount Int                   @default(5) @map("question_count")
+  passAccuracy  Int                   @default(60) @map("pass_accuracy")
+  rewardXp      Int                   @default(80) @map("reward_xp")
+  rewardCoins   Int                   @default(40) @map("reward_coins")
+
+  world         AdventureWorld        @relation(fields: [worldId], references: [id], onDelete: Cascade)
+  progress      PlayerStageProgress[]
+  gameSessions  GameSession[]
+
+  @@unique([worldId, stageNumber])
+  @@map("adventure_stages")
+}
+
+model PlayerStageProgress {
+  id           String         @id @default(uuid()) @db.Uuid
+  userId       String         @map("user_id") @db.Uuid
+  stageId      String         @map("stage_id") @db.VarChar(64)
+  stars        Int            @default(0)
+  bestScore    Int            @default(0) @map("best_score")
+  bestAccuracy Decimal        @default(0) @map("best_accuracy") @db.Decimal(5, 2)
+  completed    Boolean        @default(false)
+  completedAt  DateTime?      @map("completed_at") @db.Timestamptz(6)
+
+  user         Profile        @relation(fields: [userId], references: [id], onDelete: Cascade)
+  stage        AdventureStage @relation(fields: [stageId], references: [id], onDelete: Cascade)
+
+  @@unique([userId, stageId])
+  @@map("player_stage_progress")
+}
+
+// ============================================================================
+// 5. GAME SESSIONS & PLAYER ANSWERS
+// ============================================================================
+model GameSession {
+  id               String          @id @default(uuid()) @db.Uuid
+  userId           String          @map("user_id") @db.Uuid
+  gameMode         String          @map("game_mode") @db.VarChar(32)
+  categoryId       String?         @map("category_id") @db.VarChar(64)
+  difficulty       String?         @db.VarChar(16)
+  stageId          String?         @map("stage_id") @db.VarChar(64)
+  roomId           String?         @map("room_id") @db.Uuid
+  score            Int             @default(0)
+  totalQuestions   Int             @default(0) @map("total_questions")
+  correctAnswers   Int             @default(0) @map("correct_answers")
+  incorrectAnswers Int             @default(0) @map("incorrect_answers")
+  maxCombo         Int             @default(0) @map("max_combo")
+  accuracy         Decimal         @default(0) @db.Decimal(5, 2)
+  timeSpentSeconds Int             @default(0) @map("time_spent_seconds")
+  xpEarned         Int             @default(0) @map("xp_earned")
+  coinsEarned      Int             @default(0) @map("coins_earned")
+  isVictory        Boolean         @default(true) @map("is_victory")
+  createdAt        DateTime        @default(now()) @map("created_at") @db.Timestamptz(6)
+
+  user             Profile         @relation(fields: [userId], references: [id], onDelete: Cascade)
+  category         MathCategory?   @relation(fields: [categoryId], references: [id])
+  stage            AdventureStage? @relation(fields: [stageId], references: [id])
+  answers          PlayerAnswer[]
+
+  @@index([userId, createdAt(sort: Desc)])
+  @@map("game_sessions")
+}
+
+model PlayerAnswer {
+  id               String      @id @default(uuid()) @db.Uuid
+  sessionId        String      @map("session_id") @db.Uuid
+  userId           String      @map("user_id") @db.Uuid
+  questionId       String?     @map("question_id") @db.Uuid
+  selectedOptionId String?     @map("selected_option_id") @db.VarChar(16)
+  isCorrect        Boolean     @map("is_correct")
+  timeTakenMs      Int         @default(0) @map("time_taken_ms")
+  pointsEarned     Int         @default(0) @map("points_earned")
+  answeredAt       DateTime    @default(now()) @map("answered_at") @db.Timestamptz(6)
+
+  session          GameSession @relation(fields: [sessionId], references: [id], onDelete: Cascade)
+  user             Profile     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  question         Question?   @relation(fields: [questionId], references: [id], onDelete: SetNull)
+
+  @@map("player_answers")
+}
+
+// ============================================================================
+// 6. DAILY CHALLENGE
+// ============================================================================
+model DailyChallenge {
+  id            String                  @id @default(uuid()) @db.Uuid
+  challengeDate DateTime                @unique @map("challenge_date") @db.Date
+  titleTh       String                  @map("title_th") @db.VarChar(160)
+  titleEn       String                  @map("title_en") @db.VarChar(160)
+  questionIds   Json                    @map("question_ids")
+  maxAttempts   Int                     @default(2) @map("max_attempts")
+  rewardXp      Int                     @default(250) @map("reward_xp")
+  rewardCoins   Int                     @default(120) @map("reward_coins")
+
+  attempts      DailyChallengeAttempt[]
+
+  @@map("daily_challenges")
+}
+
+model DailyChallengeAttempt {
+  id               String         @id @default(uuid()) @db.Uuid
+  challengeId      String         @map("challenge_id") @db.Uuid
+  userId           String         @map("user_id") @db.Uuid
+  attemptNumber    Int            @default(1) @map("attempt_number")
+  score            Int            @default(0)
+  correctAnswers   Int            @default(0) @map("correct_answers")
+  timeSpentSeconds Int            @default(0) @map("time_spent_seconds")
+  completedAt      DateTime       @default(now()) @map("completed_at") @db.Timestamptz(6)
+
+  challenge        DailyChallenge @relation(fields: [challengeId], references: [id], onDelete: Cascade)
+  user             Profile        @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@map("daily_challenge_attempts")
+}
+
+// ============================================================================
+// 7. ECONOMY, SHOP, INVENTORY & PURCHASES
+// ============================================================================
+model ShopItem {
+  id            String            @id @db.VarChar(64)
+  itemType      String            @map("item_type") @db.VarChar(32)
+  nameTh        String            @map("name_th") @db.VarChar(120)
+  nameEn        String            @map("name_en") @db.VarChar(120)
+  descriptionTh String?           @map("description_th")
+  descriptionEn String?           @map("description_en")
+  rarity        String            @default("COMMON") @db.VarChar(20)
+  priceCoins    Int               @default(100) @map("price_coins")
+  requiredLevel Int               @default(1) @map("required_level")
+  previewConfig Json              @default("{}") @map("preview_config")
+  imageUrl      String?           @map("image_url")
+  isAvailable   Boolean           @default(true) @map("is_available")
+  createdAt     DateTime          @default(now()) @map("created_at") @db.Timestamptz(6)
+
+  inventories   PlayerInventory[]
+  purchases     PurchaseHistory[]
+
+  @@map("shop_items")
+}
+
+model PlayerInventory {
+  id         String   @id @default(uuid()) @db.Uuid
+  userId     String   @map("user_id") @db.Uuid
+  itemId     String   @map("item_id") @db.VarChar(64)
+  acquiredAt DateTime @default(now()) @map("acquired_at") @db.Timestamptz(6)
+
+  user       Profile  @relation(fields: [userId], references: [id], onDelete: Cascade)
+  item       ShopItem @relation(fields: [itemId], references: [id], onDelete: Cascade)
+
+  @@unique([userId, itemId])
+  @@map("player_inventory")
+}
+
+model CoinTransaction {
+  id              String   @id @default(uuid()) @db.Uuid
+  userId          String   @map("user_id") @db.Uuid
+  amount          Int
+  balanceAfter    BigInt   @map("balance_after")
+  transactionType String   @map("transaction_type") @db.VarChar(32)
+  referenceId     String?  @map("reference_id") @db.VarChar(128)
+  description     String?
+  createdAt       DateTime @default(now()) @map("created_at") @db.Timestamptz(6)
+
+  user            Profile  @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@map("coin_transactions")
+}
+
+model PurchaseHistory {
+  id          String   @id @default(uuid()) @db.Uuid
+  userId      String   @map("user_id") @db.Uuid
+  itemId      String   @map("item_id") @db.VarChar(64)
+  pricePaid   Int      @map("price_paid")
+  purchasedAt DateTime @default(now()) @map("purchased_at") @db.Timestamptz(6)
+
+  user        Profile  @relation(fields: [userId], references: [id], onDelete: Cascade)
+  item        ShopItem @relation(fields: [itemId], references: [id])
+
+  @@map("purchase_history")
+}
+
+// ============================================================================
+// 8. MISSIONS & ACHIEVEMENTS
+// ============================================================================
+model Mission {
+  id             String          @id @db.VarChar(64)
+  missionType    String          @map("mission_type") @db.VarChar(16)
+  titleTh        String          @map("title_th") @db.VarChar(160)
+  titleEn        String          @map("title_en") @db.VarChar(160)
+  descriptionTh  String?         @map("description_th")
+  descriptionEn  String?         @map("description_en")
+  metricKey      String          @map("metric_key") @db.VarChar(64)
+  targetValue    Int             @map("target_value")
+  rewardXp       Int             @default(100) @map("reward_xp")
+  rewardCoins    Int             @default(50) @map("reward_coins")
+  isActive       Boolean         @default(true) @map("is_active")
+
+  playerMissions PlayerMission[]
+
+  @@map("missions")
+}
+
+model PlayerMission {
+  id           String   @id @default(uuid()) @db.Uuid
+  userId       String   @map("user_id") @db.Uuid
+  missionId    String   @map("mission_id") @db.VarChar(64)
+  periodKey    String   @map("period_key") @db.VarChar(32)
+  currentValue Int      @default(0) @map("current_value")
+  isCompleted  Boolean  @default(false) @map("is_completed")
+  isClaimed    Boolean  @default(false) @map("is_claimed")
+  updatedAt    DateTime @default(now()) @updatedAt @map("updated_at") @db.Timestamptz(6)
+
+  user         Profile  @relation(fields: [userId], references: [id], onDelete: Cascade)
+  mission      Mission  @relation(fields: [missionId], references: [id], onDelete: Cascade)
+
+  @@unique([userId, missionId, periodKey])
+  @@map("player_missions")
+}
+
+model Achievement {
+  id                 String              @id @db.VarChar(64)
+  titleTh            String              @map("title_th") @db.VarChar(120)
+  titleEn            String              @map("title_en") @db.VarChar(120)
+  descriptionTh      String?             @map("description_th")
+  descriptionEn      String?             @map("description_en")
+  icon               String              @db.VarChar(64)
+  metricKey          String              @map("metric_key") @db.VarChar(64)
+  targetValue        Int                 @map("target_value")
+  rewardXp           Int                 @default(150) @map("reward_xp")
+  rewardCoins        Int                 @default(100) @map("reward_coins")
+  rarity             String              @default("RARE") @db.VarChar(20)
+
+  playerAchievements PlayerAchievement[]
+
+  @@map("achievements")
+}
+
+model PlayerAchievement {
+  id            String      @id @default(uuid()) @db.Uuid
+  userId        String      @map("user_id") @db.Uuid
+  achievementId String      @map("achievement_id") @db.VarChar(64)
+  currentValue  Int         @default(0) @map("current_value")
+  unlocked      Boolean     @default(false)
+  claimed       Boolean     @default(false)
+  unlockedAt    DateTime?   @map("unlocked_at") @db.Timestamptz(6)
+
+  user          Profile     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  achievement   Achievement @relation(fields: [achievementId], references: [id], onDelete: Cascade)
+
+  @@unique([userId, achievementId])
+  @@map("player_achievements")
+}
+
+// ============================================================================
+// 9. MULTIPLAYER ROOMS (1v1 MATH BATTLE)
+// ============================================================================
+model MultiplayerRoom {
+  id              String            @id @default(uuid()) @db.Uuid
+  roomCode        String            @unique @map("room_code") @db.VarChar(12)
+  hostUserId      String            @map("host_user_id") @db.Uuid
+  categoryId      String?           @map("category_id") @db.VarChar(64)
+  difficulty      String            @default("MEDIUM") @db.VarChar(16)
+  questionCount   Int               @default(10) @map("question_count")
+  timePerQuestion Int               @default(20) @map("time_per_question")
+  status          String            @default("WAITING") @db.VarChar(24)
+  questionIds     Json              @default("[]") @map("question_ids")
+  winnerUserId    String?           @map("winner_user_id") @db.Uuid
+  createdAt       DateTime          @default(now()) @map("created_at") @db.Timestamptz(6)
+  startedAt       DateTime?         @map("started_at") @db.Timestamptz(6)
+  finishedAt      DateTime?         @map("finished_at") @db.Timestamptz(6)
+
+  host            Profile           @relation("RoomHost", fields: [hostUserId], references: [id], onDelete: Cascade)
+  winner          Profile?          @relation("RoomWinner", fields: [winnerUserId], references: [id])
+  category        MathCategory?     @relation(fields: [categoryId], references: [id])
+  participants    RoomParticipant[]
+
+  @@map("multiplayer_rooms")
+}
+
+model RoomParticipant {
+  id                   String          @id @default(uuid()) @db.Uuid
+  roomId               String          @map("room_id") @db.Uuid
+  userId               String          @map("user_id") @db.Uuid
+  isReady              Boolean         @default(false) @map("is_ready")
+  score                Int             @default(0)
+  correctAnswers       Int             @default(0) @map("correct_answers")
+  currentQuestionIndex Int             @default(0) @map("current_question_index")
+  finished             Boolean         @default(false)
+  joinedAt             DateTime        @default(now()) @map("joined_at") @db.Timestamptz(6)
+
+  room                 MultiplayerRoom @relation(fields: [roomId], references: [id], onDelete: Cascade)
+  user                 Profile         @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([roomId, userId])
+  @@map("room_participants")
+}
+
+// ============================================================================
+// 10. LEVEL PROGRESSION CONFIG
+// ============================================================================
+model LevelConfig {
+  level        Int     @id
+  xpRequired   BigInt  @map("xp_required")
+  coinReward   Int     @default(50) @map("coin_reward")
+  unlockNoteTh String? @map("unlock_note_th")
+  unlockNoteEn String? @map("unlock_note_en")
+
+  @@map("level_configs")
+}

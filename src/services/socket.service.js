@@ -21,9 +21,9 @@ const registerBattleSocket = (io) => {
       }
     });
 
-    socket.on('room:start', ({ roomCode, questionIds }) => {
+    socket.on('room:start', ({ roomCode, questionIds, questions }) => {
       try {
-        const room = multiplayerService.startMatch(roomCode, questionIds);
+        const room = multiplayerService.startMatch(roomCode, questionIds, questions);
         io.to(room.roomCode).emit('room:update', room);
       } catch (error) {
         socket.emit('room:error', { message: error.message || 'Failed to start match' });
@@ -36,6 +36,19 @@ const registerBattleSocket = (io) => {
         io.to(room.roomCode).emit('room:update', room);
       } catch (error) {
         socket.emit('room:error', { message: error.message || 'Failed to submit answer' });
+      }
+    });
+
+    socket.on('room:leave', ({ roomCode, userId }) => {
+      try {
+        const code = String(roomCode || '').toUpperCase();
+        socket.leave(code);
+        const room = multiplayerService.leaveRoom(code, userId);
+        if (room) {
+          io.to(code).emit('room:update', room);
+        }
+      } catch (error) {
+        socket.emit('room:error', { message: error.message || 'Failed to leave room' });
       }
     });
   });

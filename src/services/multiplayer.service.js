@@ -17,15 +17,18 @@ exports.createRoom = (input) => {
     hostUserId: input.userId,
     categoryId: input.categoryId || 'arithmetic',
     difficulty: input.difficulty || 'MEDIUM',
-    questionCount: input.questionCount || 10,
+    questionCount: input.questionCount || 6,
     timePerQuestion: input.timePerQuestion || 20,
     status: 'WAITING',
     questionIds: [],
+    questions: [],
     players: {
       [input.userId]: {
         userId: input.userId,
         displayName: input.displayName,
         characterId: input.characterId || 'char_nova',
+        outfitId: input.outfitId || 'outfit_starter',
+        accessoryId: input.accessoryId || undefined,
         ready: true,
         score: 0,
         correctAnswers: 0,
@@ -48,7 +51,14 @@ exports.getRoom = (roomCode) => {
   return room;
 };
 
-exports.joinRoom = (roomCode, userId, displayName, characterId = 'char_nova') => {
+exports.joinRoom = (
+  roomCode,
+  userId,
+  displayName,
+  characterId = 'char_nova',
+  outfitId = 'outfit_starter',
+  accessoryId = undefined
+) => {
   const room = exports.getRoom(roomCode);
 
   if (room.status !== 'WAITING') {
@@ -62,6 +72,8 @@ exports.joinRoom = (roomCode, userId, displayName, characterId = 'char_nova') =>
     userId,
     displayName,
     characterId,
+    outfitId,
+    accessoryId,
     ready: false,
     score: 0,
     correctAnswers: 0,
@@ -69,6 +81,28 @@ exports.joinRoom = (roomCode, userId, displayName, characterId = 'char_nova') =>
     finished: false,
   };
 
+  return room;
+};
+
+exports.leaveRoom = (roomCode, userId) => {
+  const code = String(roomCode || '').toUpperCase();
+  const room = rooms.get(code);
+  if (!room) return null;
+
+  delete room.players[userId];
+  const remaining = Object.keys(room.players);
+  if (remaining.length === 0) {
+    rooms.delete(code);
+    return null;
+  }
+
+  if (room.hostUserId === userId) {
+    room.hostUserId = remaining[0];
+  }
+  if (room.status === 'IN_PROGRESS') {
+    room.status = 'FINISHED';
+    room.winnerUserId = remaining[0];
+  }
   return room;
 };
 
@@ -80,9 +114,10 @@ exports.setReady = (roomCode, userId, ready) => {
   return room;
 };
 
-exports.startMatch = (roomCode, questionIds) => {
+exports.startMatch = (roomCode, questionIds, questions = []) => {
   const room = exports.getRoom(roomCode);
-  room.questionIds = questionIds;
+  room.questionIds = Array.isArray(questionIds) ? questionIds : [];
+  room.questions = Array.isArray(questions) ? questions : [];
   room.status = 'IN_PROGRESS';
   return room;
 };
@@ -92,10 +127,10 @@ exports.submitAnswer = (roomCode, userId, scoreDelta, correct, finished) => {
   const player = room.players[userId];
 
   if (player) {
-    player.score += scoreDelta;
+    player.score += Number(scoreDelta) || 0;
     if (correct) player.correctAnswers += 1;
     player.currentIndex += 1;
-    player.finished = finished;
+    player.finished = Boolean(finished);
   }
 
   const playerList = Object.values(room.players);

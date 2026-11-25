@@ -8,6 +8,8 @@ exports.createRoom = async (req, res) => {
       userId,
       displayName,
       characterId,
+      outfitId,
+      accessoryId,
       categoryId,
       difficulty,
       questionCount,
@@ -73,6 +75,8 @@ exports.createRoom = async (req, res) => {
       userId,
       displayName,
       characterId,
+      outfitId,
+      accessoryId,
       categoryId,
       difficulty,
       questionCount,
@@ -96,7 +100,7 @@ exports.createRoom = async (req, res) => {
 
 exports.joinRoom = async (req, res) => {
   try {
-    const { userId, displayName, characterId } = req.body || {};
+    const { userId, displayName, characterId, outfitId, accessoryId } = req.body || {};
 
     if (typeof userId !== 'string' || userId.length < 1) {
       return res.status(400).json({
@@ -123,7 +127,9 @@ exports.joinRoom = async (req, res) => {
       String(req.params.roomCode),
       userId,
       displayName,
-      characterId
+      characterId,
+      outfitId,
+      accessoryId
     );
 
     res.json({

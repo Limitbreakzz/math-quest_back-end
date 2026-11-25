@@ -1,6 +1,37 @@
 const multiplayerService = require('./multiplayer.service');
 const kahootService = require('./kahoot.service');
 
+const kahootTimers = new Map();
+
+const clearKahootTimer = (pin) => {
+  const code = String(pin || '').trim();
+  const existing = kahootTimers.get(code);
+  if (existing) {
+    clearTimeout(existing);
+    kahootTimers.delete(code);
+  }
+};
+
+const scheduleKahootAutoReveal = (io, room) => {
+  if (!room || room.status !== 'QUESTION') {
+    clearKahootTimer(room?.pin);
+    return;
+  }
+  const code = room.pin;
+  clearKahootTimer(code);
+  const delayMs = Math.max(1000, room.remainingMs || room.timePerQuestion * 1000);
+  const timer = setTimeout(() => {
+    kahootTimers.delete(code);
+    try {
+      const revealed = kahootService.revealQuestion(code);
+      io.to(`kahoot_${code}`).emit('kahoot:update', revealed);
+    } catch {
+      // Room may have been closed already
+    }
+  }, delayMs + 250);
+  kahootTimers.set(code, timer);
+};
+
 const registerBattleSocket = (io) => {
   io.on('connection', (socket) => {
     // -------------------------------------------------------------------------
@@ -74,6 +105,7 @@ const registerBattleSocket = (io) => {
       try {
         const room = kahootService.startGame(pin, questions);
         io.to(`kahoot_${room.pin}`).emit('kahoot:update', room);
+        scheduleKahootAutoReveal(io, room);
       } catch (error) {
         socket.emit('kahoot:error', { message: error.message || 'Failed to start live quiz' });
       }
@@ -82,6 +114,9 @@ const registerBattleSocket = (io) => {
     socket.on('kahoot:answer', ({ pin, playerId, optionId }) => {
       try {
         const room = kahootService.submitAnswer(pin, playerId, optionId);
+        if (room.status !== 'QUESTION') {
+          clearKahootTimer(room.pin);
+        }
         io.to(`kahoot_${room.pin}`).emit('kahoot:update', room);
       } catch (error) {
         socket.emit('kahoot:error', { message: error.message || 'Failed to submit answer' });
@@ -90,6 +125,7 @@ const registerBattleSocket = (io) => {
 
     socket.on('kahoot:reveal', ({ pin }) => {
       try {
+        clearKahootTimer(pin);
         const room = kahootService.revealQuestion(pin);
         io.to(`kahoot_${room.pin}`).emit('kahoot:update', room);
       } catch (error) {
@@ -101,6 +137,7 @@ const registerBattleSocket = (io) => {
       try {
         const room = kahootService.nextQuestion(pin);
         io.to(`kahoot_${room.pin}`).emit('kahoot:update', room);
+        scheduleKahootAutoReveal(io, room);
       } catch (error) {
         socket.emit('kahoot:error', { message: error.message || 'Failed to advance question' });
       }
@@ -113,6 +150,8 @@ const registerBattleSocket = (io) => {
         const room = kahootService.leaveRoom(code, playerId);
         if (room) {
           io.to(`kahoot_${code}`).emit('kahoot:update', room);
+        } else {
+          clearKahootTimer(code);
         }
       } catch (error) {
         socket.emit('kahoot:error', { message: error.message || 'Failed to leave live quiz' });

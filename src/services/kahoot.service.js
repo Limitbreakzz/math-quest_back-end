@@ -28,6 +28,12 @@ const serializeRoom = (room) => {
     }
   }
 
+  const totalMs = room.timePerQuestion * 1000;
+  const remainingMs =
+    room.status === 'QUESTION' && room.questionStartedAt
+      ? Math.max(0, Math.min(totalMs, totalMs - Math.max(0, Date.now() - room.questionStartedAt)))
+      : 0;
+
   return {
     pin: room.pin,
     hostUserId: room.hostUserId,
@@ -40,6 +46,7 @@ const serializeRoom = (room) => {
     currentIndex: room.currentIndex,
     totalQuestions: room.questions.length || room.questionCount,
     questionStartedAt: room.questionStartedAt,
+    remainingMs,
     currentQuestion:
       room.status === 'QUESTION' && currentQuestion
         ? {

@@ -8,6 +8,7 @@ const shopRoute = require('./shop.route');
 const leaderboardRoute = require('./leaderboard.route');
 const missionRoute = require('./mission.route');
 const multiplayerRoute = require('./multiplayer.route');
+const kahootRoute = require('./kahoot.route');
 const adminRoute = require('./admin.route');
 
 const { sendSuccess } = require('../utils/response');
@@ -23,6 +24,7 @@ router.use('/shop', shopRoute);
 router.use('/leaderboard', leaderboardRoute);
 router.use('/missions', missionRoute);
 router.use('/multiplayer', multiplayerRoute);
+router.use('/kahoot', kahootRoute);
 router.use('/admin', adminRoute);
 
 module.exports = router;

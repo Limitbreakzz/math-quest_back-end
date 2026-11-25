@@ -143,4 +143,28 @@ describe('MathQuest Backend API & Plain-JS Validation', () => {
     assert.equal(missing.body.status, 'error');
     assert.equal(missing.body.message, 'Internal server error');
   });
+
+  it('Kahoot live quiz room lifecycle creates 6-digit PIN, joins players, and validates inputs', async () => {
+    const badCreate = await request('/kahoot/rooms', {
+      method: 'POST',
+      body: JSON.stringify({ hostUserId: '', hostName: '' }),
+    });
+    assert.equal(badCreate.status, 400);
+    assert.equal(badCreate.body.status, 'error');
+
+    const created = await request('/kahoot/rooms', {
+      method: 'POST',
+      body: JSON.stringify({ hostUserId: 'host1', hostName: 'Teacher', questionCount: 5, timePerQuestion: 20 }),
+    });
+    assert.equal(created.status, 200);
+    assert.equal(created.body.status, 'success');
+    assert.match(created.body.data.pin, /^\d{6}$/);
+
+    const joined = await request(`/kahoot/rooms/${created.body.data.pin}/join`, {
+      method: 'POST',
+      body: JSON.stringify({ playerId: 'p2', displayName: 'Student 1' }),
+    });
+    assert.equal(joined.status, 200);
+    assert.equal(joined.body.data.players.length, 2);
+  });
 });
